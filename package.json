@@ -1,0 +1,17 @@
+{
+  "name": "sync-cal",
+  "version": "0.3.0",
+  "description": "Thunderbird add-on for one-way calendar synchronization",
+  "private": true,
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "build": "zip -r sync-cal.xpi manifest.json background.html background.js options.html options.js options.css icons/ experiments/ -x '*.sys.mjs'"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0"
+  },
+  "license": "MPL-2.0"
+}
