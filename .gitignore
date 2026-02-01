@@ -1,0 +1,4 @@
+node_modules/
+sync-cal.xpi
+*.log
+.DS_Store

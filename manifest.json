@@ -1,0 +1,48 @@
+{
+  "manifest_version": 2,
+  "name": "Calendar Sync Bridge",
+  "version": "0.3.0",
+  "description": "Sync one calendar into another.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "sync-cal@local",
+      "strict_min_version": "128.0"
+    }
+  },
+  "permissions": [
+    "storage"
+  ],
+  "icons": {
+    "32": "icons/sync.svg",
+    "64": "icons/sync.svg"
+  },
+  "background": {
+    "page": "background.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "experiment_apis": {
+    "calendar_calendars": {
+      "schema": "experiments/calendar/schema/calendar-calendars.json",
+      "parent": {
+        "scopes": ["addon_parent"],
+        "script": "experiments/calendar/parent/ext-calendar-calendars.js",
+        "paths": [
+          ["calendar", "calendars"]
+        ]
+      }
+    },
+    "calendar_items": {
+      "schema": "experiments/calendar/schema/calendar-items.json",
+      "parent": {
+        "scopes": ["addon_parent"],
+        "script": "experiments/calendar/parent/ext-calendar-items.js",
+        "paths": [
+          ["calendar", "items"]
+        ]
+      }
+    }
+  }
+}

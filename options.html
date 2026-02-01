@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Calendar Sync Bridge</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>Calendar Sync Bridge <span id="version" class="version"></span></h1>
+        <p>Sync one calendar into another. Changes flow from the source into the target.</p>
+      </header>
+
+      <section class="panel">
+        <div class="toolbar">
+          <label class="field">
+            <span>Filter calendars</span>
+            <input id="calendar-filter" type="text" placeholder="Type to filter by name">
+          </label>
+          <button id="refresh" type="button">Refresh list</button>
+        </div>
+
+        <div class="grid">
+          <div class="column">
+            <h2>Source calendar</h2>
+            <p class="hint">Read-only is fine. Items are copied from here.</p>
+            <select id="source-calendar" size="10"></select>
+          </div>
+          <div class="column">
+            <h2>Target calendar</h2>
+            <p class="hint">Must be writable. Items will be created or updated here.</p>
+            <select id="target-calendar" size="10"></select>
+          </div>
+        </div>
+
+        <div class="actions">
+          <label class="toggle">
+            <input id="auto-sync" type="checkbox">
+            <span>Auto-sync changes</span>
+          </label>
+          <div class="buttons">
+            <button id="swap" type="button">Swap</button>
+            <button id="save" type="button">Save</button>
+            <button id="sync-now" type="button">Sync now</button>
+          </div>
+        </div>
+
+        <div id="status" class="status" role="status"></div>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
