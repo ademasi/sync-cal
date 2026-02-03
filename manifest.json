@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Calendar Sync Bridge",
-  "version": "0.3.0",
+  "version": "0.3.3",
   "description": "Sync one calendar into another.",
   "browser_specific_settings": {
     "gecko": {

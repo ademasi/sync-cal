@@ -80,29 +80,114 @@ async function ensureItemData(item) {
   return browser.calendar.items.get(item.calendarId, item.id, { returnFormat: "ical" });
 }
 
+function withTimeout(promise, ms, errorMsg) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(errorMsg)), ms))
+  ]);
+}
+
+function generateUid() {
+  return crypto.randomUUID() + "@sync-cal";
+}
+
+function rewriteUid(icalString, newUid) {
+  // Replace UID line in iCal with a new one
+  return icalString.replace(/^UID:[^\r\n]+(\r?\n)/m, `UID:${newUid}$1`);
+}
+
+function extractEventInfo(icalString) {
+  // Extract SUMMARY (title) and DTSTART from iCal for duplicate detection
+  const summaryMatch = icalString.match(/^SUMMARY[^:]*:(.+)$/m);
+  const dtstartMatch = icalString.match(/^DTSTART[^:]*:(.+)$/m);
+  return {
+    title: summaryMatch ? summaryMatch[1].trim() : null,
+    dtstart: dtstartMatch ? dtstartMatch[1].trim() : null
+  };
+}
+
+async function findDuplicateInTarget(targetCalendarId, sourceItem) {
+  const sourceInfo = extractEventInfo(sourceItem.item);
+  if (!sourceInfo.title || !sourceInfo.dtstart) {
+    return null; // Can't match without title and start date
+  }
+
+  logInfo("Checking for duplicate:", sourceInfo.title, sourceInfo.dtstart);
+
+  try {
+    const targetItems = await browser.calendar.items.query({
+      calendarId: targetCalendarId,
+      returnFormat: "ical"
+    });
+
+    for (const targetItem of targetItems) {
+      const itemData = await ensureItemData(targetItem);
+      if (typeof itemData.item !== "string") continue;
+
+      const targetInfo = extractEventInfo(itemData.item);
+      if (targetInfo.title === sourceInfo.title && targetInfo.dtstart === sourceInfo.dtstart) {
+        logInfo("Found duplicate:", targetItem.id);
+        return targetItem.id;
+      }
+    }
+  } catch (err) {
+    logError("Error checking for duplicates", err);
+  }
+
+  return null;
+}
+
 async function safeCreate(targetCalendarId, sourceItem) {
   const format = sourceItem.format || "ical";
-  return browser.calendar.items.create(targetCalendarId, {
-    type: sourceItem.type,
-    format,
-    item: sourceItem.item
-  });
+  // Generate a new UID to avoid conflicts with Exchange/TbSync style IDs
+  const newUid = generateUid();
+  const modifiedIcal = typeof sourceItem.item === "string"
+    ? rewriteUid(sourceItem.item, newUid)
+    : sourceItem.item;
+
+  logInfo("Creating item", sourceItem.id, "->", newUid, "type:", sourceItem.type);
+  const result = await withTimeout(
+    browser.calendar.items.create(targetCalendarId, {
+      type: sourceItem.type,
+      format,
+      item: modifiedIcal
+    }),
+    30000,
+    `Create timed out for ${sourceItem.id}`
+  );
+  logInfo("Created item", sourceItem.id, "->", result.id);
+  return result;
 }
 
 async function safeUpdate(targetCalendarId, targetItemId, sourceItem) {
   const format = sourceItem.format || "ical";
-  return browser.calendar.items.update(targetCalendarId, targetItemId, {
-    format,
-    item: sourceItem.item
-  });
+  return withTimeout(
+    browser.calendar.items.update(targetCalendarId, targetItemId, {
+      format,
+      item: sourceItem.item
+    }),
+    30000,
+    `Update timed out for ${targetItemId}`
+  );
 }
 
 async function safeRemove(targetCalendarId, targetItemId) {
-  await browser.calendar.items.remove(targetCalendarId, targetItemId);
+  await withTimeout(
+    browser.calendar.items.remove(targetCalendarId, targetItemId),
+    30000,
+    `Remove timed out for ${targetItemId}`
+  );
 }
 
-function enqueueSync(task) {
-  syncQueue = syncQueue.then(() => task()).catch(err => {
+function enqueueSync(task, propagateError = false) {
+  const promise = syncQueue.then(() => task());
+  if (propagateError) {
+    syncQueue = promise.catch(err => {
+      logError("Sync failed", err);
+    });
+    return promise;
+  }
+  syncQueue = promise.catch(err => {
     logError("Sync failed", err);
   });
   return syncQueue;
@@ -135,15 +220,19 @@ async function validateCalendars(options) {
 }
 
 async function doFullSync(reason, force) {
+  logInfo("doFullSync starting", { reason, force });
   const options = await getOptions();
+  logInfo("Options:", { source: options.sourceCalendarId, target: options.targetCalendarId, autoSync: options.autoSync });
   if (!force && !options.autoSync) {
+    logInfo("Sync skipped: autoSync disabled and not forced");
     return;
   }
   ensureCalendarApi();
   const validation = await validateCalendars(options);
   if (!validation.ok) {
+    logInfo("Sync skipped:", validation.reason);
     if (validation.reason !== "missing") {
-      logInfo("Sync skipped:", validation.reason);
+      throw new Error(`Calendar validation failed: ${validation.reason}`);
     }
     return;
   }
@@ -153,8 +242,10 @@ async function doFullSync(reason, force) {
     calendarId: options.sourceCalendarId,
     returnFormat: "ical"
   });
+  logInfo(`Found ${sourceItems.length} source items`);
 
   const seen = new Set();
+  let created = 0, updated = 0, failed = 0;
   for (const rawItem of sourceItems) {
     const item = await ensureItemData(rawItem);
     seen.add(item.id);
@@ -163,24 +254,44 @@ async function doFullSync(reason, force) {
     if (mappedTargetId) {
       try {
         await safeUpdate(options.targetCalendarId, mappedTargetId, item);
+        updated++;
         continue;
       } catch (err) {
-        logError("Update failed, recreating item", item.id, err);
+        logError("Update failed, will check for duplicate or recreate", item.id, err);
       }
     }
 
+    // Check for existing duplicate in target calendar before creating
+    const existingId = await findDuplicateInTarget(options.targetCalendarId, item);
+    if (existingId) {
+      logInfo("Found existing item, linking instead of creating", item.id, "->", existingId);
+      map.items[item.id] = existingId;
+      try {
+        await safeUpdate(options.targetCalendarId, existingId, item);
+        updated++;
+      } catch (err) {
+        logError("Update of existing duplicate failed", existingId, err);
+        failed++;
+      }
+      continue;
+    }
+
     try {
-      const created = await safeCreate(options.targetCalendarId, item);
-      map.items[item.id] = created.id;
+      const createdItem = await safeCreate(options.targetCalendarId, item);
+      map.items[item.id] = createdItem.id;
+      created++;
     } catch (err) {
       logError("Create failed", item.id, err);
+      failed++;
     }
   }
 
+  let removed = 0;
   for (const [sourceId, targetId] of Object.entries(map.items)) {
     if (!seen.has(sourceId)) {
       try {
         await safeRemove(options.targetCalendarId, targetId);
+        removed++;
       } catch (err) {
         logError("Remove failed", targetId, err);
       }
@@ -189,7 +300,7 @@ async function doFullSync(reason, force) {
   }
 
   await saveMap(map);
-  logInfo("Full sync complete", reason || "");
+  logInfo("Full sync complete", { reason, created, updated, removed, failed });
 }
 
 async function syncOneItem(rawItem) {
@@ -215,16 +326,29 @@ async function syncOneItem(rawItem) {
   if (mappedTargetId) {
     try {
       await safeUpdate(options.targetCalendarId, mappedTargetId, item);
+      await saveMap(map);
+      return;
     } catch (err) {
-      logError("Update failed, recreating item", item.id, err);
-      const created = await safeCreate(options.targetCalendarId, item);
-      map.items[item.id] = created.id;
+      logError("Update failed, will check for duplicate or recreate", item.id, err);
     }
-  } else {
-    const created = await safeCreate(options.targetCalendarId, item);
-    map.items[item.id] = created.id;
   }
 
+  // Check for existing duplicate before creating
+  const existingId = await findDuplicateInTarget(options.targetCalendarId, item);
+  if (existingId) {
+    logInfo("Found existing item, linking instead of creating", item.id, "->", existingId);
+    map.items[item.id] = existingId;
+    try {
+      await safeUpdate(options.targetCalendarId, existingId, item);
+    } catch (err) {
+      logError("Update of existing duplicate failed", existingId, err);
+    }
+    await saveMap(map);
+    return;
+  }
+
+  const created = await safeCreate(options.targetCalendarId, item);
+  map.items[item.id] = created.id;
   await saveMap(map);
 }
 
@@ -292,7 +416,7 @@ async function listCalendarsForUi() {
 
 async function manualSyncForUi() {
   try {
-    await enqueueSync(() => doFullSync("manual", true));
+    await enqueueSync(() => doFullSync("manual", true), true);
     return { ok: true };
   } catch (err) {
     logError("Manual sync failed", err);
