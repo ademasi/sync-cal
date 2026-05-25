@@ -31,18 +31,6 @@
           { "$ref": "CalendarItemFormats" },
           { "type": "array", "items": { "$ref": "CalendarItemFormats" } }
         ]
-      },
-      {
-        "id": "CalendarItemAlarm",
-        "type": "object",
-        "description": "TODO needs real structure",
-        "properties": {
-          "itemId": { "type": "string" },
-          "action": { "type": "string" },
-          "date": { "type": "string" },
-          "offset": { "type": "string" },
-          "related": { "type": "string", "enum": ["absolute", "start", "end"] }
-        }
       }
     ],
     "functions": [
@@ -129,37 +117,12 @@
         ]
       },
       {
-        "name": "move",
-        "async": true,
-        "type": "function",
-        "parameters": [
-          { "type": "string", "name": "fromCalendarId" },
-          { "type": "string", "name": "id" },
-          { "type": "string", "name": "toCalendarId" }
-        ]
-      },
-      {
         "name": "remove",
         "async": true,
         "type": "function",
         "parameters": [
           { "type": "string", "name": "calendarId" },
           { "type": "string", "name": "id" }
-        ]
-      },
-      {
-        "name": "getCurrent",
-        "async": true,
-        "type": "function",
-        "parameters": [
-          {
-            "type": "object",
-            "name": "getOptions",
-            "optional": true,
-            "properties": {
-              "returnFormat": { "$ref": "ReturnFormat", "optional": true }
-            }
-          }
         ]
       }
     ],
@@ -203,23 +166,6 @@
         "parameters": [
           { "type": "string", "name": "calendarId" },
           { "type": "string", "name": "id" }
-        ]
-      },
-      {
-        "name": "onAlarm",
-        "type": "function",
-        "parameters": [
-          { "name": "item", "$ref": "CalendarItem" },
-          { "name": "alarm", "$ref": "CalendarItemAlarm" }
-        ],
-        "extraParameters": [
-          {
-            "type": "object",
-            "optional": true,
-            "properties": {
-              "returnFormat": { "$ref": "ReturnFormat", "optional": true }
-            }
-          }
         ]
       }
     ]

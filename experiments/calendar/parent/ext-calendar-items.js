@@ -79,7 +79,7 @@ this.calendar_items = class extends ExtensionAPI {
       throw e;
     }
 
-    const { getResolvedCalendarById, getCachedCalendar, isCachedCalendar, isOwnCalendar, propsToItem, convertItem, convertAlarm } = utils;
+    const { getResolvedCalendarById, getCachedCalendar, isCachedCalendar, isOwnCalendar, propsToItem, convertItem } = utils;
 
     return {
       calendar: {
@@ -176,29 +176,6 @@ this.calendar_items = class extends ExtensionAPI {
             const modifiedItem = await calendar.modifyItem(newItem, oldItem);
             return convertItem(modifiedItem, updateProperties, context.extension);
           },
-          async move(fromCalendarId, id, toCalendarId) {
-            if (fromCalendarId == toCalendarId) {
-              return;
-            }
-
-            const fromCalendar = cal.manager.getCalendarById(fromCalendarId);
-            const toCalendar = cal.manager.getCalendarById(toCalendarId);
-            const item = await fromCalendar.getItem(id);
-
-            if (!item) {
-              throw new ExtensionError("Could not find item " + id);
-            }
-
-            if (isOwnCalendar(toCalendar, context.extension) && isOwnCalendar(fromCalendar, context.extension)) {
-              // TODO doing this first, the item may not be in the db and it will fail. Doing this
-              // after addItem, the metadata will not be available for the onCreated listener
-              const fromCache = getCachedCalendar(fromCalendar);
-              const toCache = getCachedCalendar(toCalendar);
-              toCache.setMetaData(item.id, fromCache.getMetaData(item.id));
-            }
-            await toCalendar.addItem(item);
-            await fromCalendar.deleteItem(item);
-          },
           async remove(calendarId, id) {
             const calendar = getResolvedCalendarById(context.extension, calendarId);
 
@@ -207,17 +184,6 @@ this.calendar_items = class extends ExtensionAPI {
               throw new ExtensionError("Could not find item " + id);
             }
             await calendar.deleteItem(item);
-          },
-
-          async getCurrent(options) {
-            try {
-              // TODO This seems risky, could be null depending on remoteness
-              const item = context.browsingContext.embedderElement.ownerGlobal.calendarItem;
-              return convertItem(item, options, context.extension);
-            } catch (e) {
-              console.error(e);
-              return null;
-            }
           },
 
           onCreated: new EventManager({
@@ -269,31 +235,6 @@ this.calendar_items = class extends ExtensionAPI {
               cal.manager.addCalendarObserver(observer);
               return () => {
                 cal.manager.removeCalendarObserver(observer);
-              };
-            },
-          }).api(),
-
-          onAlarm: new EventManager({
-            context,
-            name: "calendar.items.onAlarm",
-            register: (fire, options) => {
-              const observer = {
-                QueryInterface: ChromeUtils.generateQI(["calIAlarmServiceObserver"]),
-                onAlarm(item, alarm) {
-                  fire.sync(convertItem(item, options, context.extension), convertAlarm(item, alarm));
-                },
-                onRemoveAlarmsByItem(_item) {},
-                onRemoveAlarmsByCalendar(_calendar) {},
-                onAlarmsLoaded(_calendar) {},
-              };
-
-              const alarmsvc = Cc["@mozilla.org/calendar/alarm-service;1"].getService(
-                Ci.calIAlarmService
-              );
-
-              alarmsvc.addObserver(observer);
-              return () => {
-                alarmsvc.removeObserver(observer);
               };
             },
           }).api(),

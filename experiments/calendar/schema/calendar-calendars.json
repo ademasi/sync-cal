@@ -20,19 +20,6 @@
         }
       },
       {
-        "id": "CalendarChangeProps",
-        "type": "object",
-        "properties": {
-          "name": { "type": "string" },
-          "url": { "type": "string" },
-          "readOnly": { "type": "boolean" },
-          "enabled": { "type": "boolean" },
-          "visible": { "type": "boolean" },
-          "showReminders": { "type": "boolean" },
-          "color": { "type": "string", "optional": true }
-        }
-      },
-      {
         "id": "CalendarCapabilities",
         "type": "object",
         "properties": {
@@ -121,105 +108,7 @@
         "parameters": [
           { "type": "string", "name": "id" }
          ]
-       },
-      {
-        "name": "create",
-        "async": true,
-        "type": "function",
-        "parameters": [
-          {
-            "type": "object",
-            "name": "createProperties",
-            "properties": {
-              "name": { "type": "string" },
-              "type": { "type": "string" },
-              "url": { "type": "string" },
-              "readOnly": { "type": "boolean", "optional": true },
-              "enabled": { "type": "boolean", "optional": true },
-              "visible": { "type": "boolean", "optional": true },
-              "showReminders": { "type": "boolean", "optional": true },
-              "color": { "type": "string", "optional": true },
-              "capabilities": { "$ref": "CalendarCapabilities", "optional": true }
-            }
-          }
-        ]
-      },
-      {
-        "name": "update",
-        "async": true,
-        "type": "function",
-        "parameters": [
-          { "type": "string", "name": "id" },
-          {
-            "type": "object",
-            "name": "updateProperties",
-            "properties": {
-              "name": { "type": "string", "optional": true },
-              "url": { "type": "string", "optional": true },
-              "readOnly": { "type": "boolean", "optional": true },
-              "enabled": { "type": "boolean", "optional": true },
-              "color": { "type": "string", "optional": true },
-              "capabilities": { "$ref": "CalendarCapabilities", "optional": true },
-              "lastError": { "type": "string", "optional": true }
-            }
-          }
-        ]
-      },
-      {
-        "name": "remove",
-        "async": true,
-        "type": "function",
-        "parameters": [
-          { "type": "string", "name": "id" }
-        ]
-      },
-      {
-        "name": "clear",
-        "async": true,
-        "type": "function",
-        "parameters": [
-          { "type": "string", "name": "id" }
-        ]
-      },
-      {
-        "name": "synchronize",
-        "async": true,
-        "type": "function",
-        "parameters": [
-          {
-            "optional": true,
-            "name": "ids",
-            "choices": [
-              { "type": "string" },
-              { "type": "array", "items": { "type": "string" } }
-            ]
-          }
-        ]
-      }
-    ],
-    "events": [
-      {
-        "name": "onCreated",
-        "type": "function",
-        "parameters": [
-          { "name": "calendar", "$ref": "Calendar" }
-        ]
-      },
-      {
-        "name": "onUpdated",
-        "type": "function",
-        "parameters": [
-          { "name": "calendar", "$ref": "Calendar" },
-          { "name": "changeInfo", "$ref": "CalendarChangeProps" }
-        ]
-      },
-      {
-        "name": "onRemoved",
-        "type": "function",
-        "parameters": [
-          { "name": "id", "type": "string" }
-        ]
-      }
+       }
     ]
   }
 ]
