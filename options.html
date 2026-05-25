@@ -39,6 +39,14 @@
             <input id="auto-sync" type="checkbox">
             <span>Auto-sync changes</span>
           </label>
+          <label class="field window-field">
+            <span>Sync past days</span>
+            <input id="sync-past-days" type="number" min="0" step="1" value="30">
+          </label>
+          <label class="field window-field">
+            <span>Sync future days (0 = unlimited)</span>
+            <input id="sync-future-days" type="number" min="0" step="1" value="0">
+          </label>
           <div class="buttons">
             <button id="swap" type="button">Swap</button>
             <button id="save" type="button">Save</button>

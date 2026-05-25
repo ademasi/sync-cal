@@ -122,6 +122,17 @@ select {
   color: var(--muted);
 }
 
+.window-field {
+  flex: 0 1 180px;
+}
+
+.window-field input {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-size: 1rem;
+}
+
 .buttons {
   display: flex;
   gap: 10px;

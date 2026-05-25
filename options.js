@@ -7,6 +7,8 @@ const refreshButton = document.getElementById("refresh");
 const saveButton = document.getElementById("save");
 const syncButton = document.getElementById("sync-now");
 const swapButton = document.getElementById("swap");
+const pastDaysInput = document.getElementById("sync-past-days");
+const futureDaysInput = document.getElementById("sync-future-days");
 
 let calendars = [];
 let selectedSource = "";
@@ -110,6 +112,8 @@ async function loadOptions() {
   selectedSource = options.sourceCalendarId || "";
   selectedTarget = options.targetCalendarId || "";
   autoSyncToggle.checked = options.autoSync !== false;
+  pastDaysInput.value = Number.isInteger(options.syncPastDays) ? options.syncPastDays : 30;
+  futureDaysInput.value = Number.isInteger(options.syncFutureDays) ? options.syncFutureDays : 0;
 }
 
 function validateSelections() {
@@ -131,10 +135,19 @@ function validateSelections() {
     return null;
   }
 
+  const pastDays = parseInt(pastDaysInput.value, 10);
+  const futureDays = parseInt(futureDaysInput.value, 10);
+  if (!Number.isInteger(pastDays) || pastDays < 0 || !Number.isInteger(futureDays) || futureDays < 0) {
+    setStatus("Sync window days must be whole numbers ≥ 0.", true);
+    return null;
+  }
+
   return {
     sourceCalendarId: sourceId,
     targetCalendarId: targetId,
-    autoSync: autoSyncToggle.checked
+    autoSync: autoSyncToggle.checked,
+    syncPastDays: pastDays,
+    syncFutureDays: futureDays
   };
 }
 
