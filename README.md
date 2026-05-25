@@ -8,10 +8,11 @@ A Thunderbird add-on that provides one-way synchronization from a source calenda
 - **Real-time sync**: Automatically syncs when items are created, updated, or deleted
 - **Manual sync**: Trigger a full sync on demand
 - **Calendar filtering**: Filter calendars by name in the options UI
+- **Configurable sync window**: Limit how far back/forward events are synced (default: past 30 days plus all future events)
 
 ## Requirements
 
-- Thunderbird 128 or newer
+- Betterbird or Thunderbird 140 or newer
 - `extensions.experiments.enabled` must be set to `true` in Config Editor
 
 ## Installation
@@ -44,13 +45,14 @@ A Thunderbird add-on that provides one-way synchronization from a source calenda
 - Target calendar must be writable (not read-only)
 - Deleting an event from the source will delete the synced copy from the target
 - The add-on maintains a mapping between source and target items
+- The sync window is configurable in Options via **Sync past days** / **Sync future days** (default: past 30 days plus all future events; setting future days to `0` means unlimited future)
 
 ## Building
 
 Create an XPI package:
 
 ```bash
-zip -r sync-cal.xpi manifest.json background.html background.js \
+zip -r sync-cal.xpi manifest.json background.html background.js helpers.js \
   options.html options.js options.css icons/ experiments/ \
   -x "*.sys.mjs"
 ```
@@ -64,6 +66,7 @@ sync-cal/
 ├── manifest.json           # Add-on manifest
 ├── background.html         # Background page
 ├── background.js           # Sync logic and event handling
+├── helpers.js              # Pure shared helpers (UID/iCal parsing, sync range)
 ├── options.html            # Options UI
 ├── options.js              # Options page logic
 ├── options.css             # Options styling

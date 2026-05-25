@@ -83,7 +83,7 @@ describe("getFilteredCalendars", () => {
 });
 
 describe("validateSelections", () => {
-  function validateSelections(sourceId, targetId, calendars, autoSync) {
+  function validateSelections(sourceId, targetId, calendars, autoSync, pastDays, futureDays) {
     if (!sourceId || !targetId) {
       return { error: "Select both a source and a target calendar." };
     }
@@ -96,11 +96,17 @@ describe("validateSelections", () => {
       return { error: "Target calendar must be writable." };
     }
 
+    if (!Number.isInteger(pastDays) || pastDays < 0 || !Number.isInteger(futureDays) || futureDays < 0) {
+      return { error: "Sync window days must be whole numbers ≥ 0." };
+    }
+
     return {
       options: {
         sourceCalendarId: sourceId,
         targetCalendarId: targetId,
-        autoSync: autoSync
+        autoSync: autoSync,
+        syncPastDays: pastDays,
+        syncFutureDays: futureDays
       }
     };
   }
@@ -111,31 +117,38 @@ describe("validateSelections", () => {
   ];
 
   test("fails when source is not selected", () => {
-    const result = validateSelections("", "1", calendars, true);
+    const result = validateSelections("", "1", calendars, true, 30, 0);
     expect(result.error).toBe("Select both a source and a target calendar.");
   });
 
   test("fails when target is not selected", () => {
-    const result = validateSelections("1", "", calendars, true);
+    const result = validateSelections("1", "", calendars, true, 30, 0);
     expect(result.error).toBe("Select both a source and a target calendar.");
   });
 
   test("fails when source and target are the same", () => {
-    const result = validateSelections("1", "1", calendars, true);
+    const result = validateSelections("1", "1", calendars, true, 30, 0);
     expect(result.error).toBe("Source and target must be different calendars.");
   });
 
   test("fails when target is read-only", () => {
-    const result = validateSelections("1", "2", calendars, true);
+    const result = validateSelections("1", "2", calendars, true, 30, 0);
     expect(result.error).toBe("Target calendar must be writable.");
   });
 
+  test("fails when past days is negative", () => {
+    const result = validateSelections("2", "1", calendars, false, -5, 0);
+    expect(result.error).toBe("Sync window days must be whole numbers ≥ 0.");
+  });
+
   test("returns options when valid", () => {
-    const result = validateSelections("2", "1", calendars, false);
+    const result = validateSelections("2", "1", calendars, false, 30, 0);
     expect(result.options).toEqual({
       sourceCalendarId: "2",
       targetCalendarId: "1",
-      autoSync: false
+      autoSync: false,
+      syncPastDays: 30,
+      syncFutureDays: 0
     });
   });
 });
