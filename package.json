@@ -7,7 +7,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "build": "zip -r sync-cal.xpi manifest.json background.html background.js options.html options.js options.css icons/ experiments/ -x '*.sys.mjs'"
+    "build": "zip -r sync-cal.xpi manifest.json background.html background.js helpers.js options.html options.js options.css icons/ experiments/ -x '*.sys.mjs'"
   },
   "devDependencies": {
     "eslint": "^8.57.0",

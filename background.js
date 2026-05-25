@@ -3,6 +3,8 @@
  * One-way sync from a source calendar to a target calendar.
  */
 
+const { rewriteUid, extractEventInfo } = globalThis.SyncCalHelpers;
+
 const DEFAULT_OPTIONS = {
   sourceCalendarId: "",
   targetCalendarId: "",
@@ -90,21 +92,6 @@ function withTimeout(promise, ms, errorMsg) {
 
 function generateUid() {
   return crypto.randomUUID() + "@sync-cal";
-}
-
-function rewriteUid(icalString, newUid) {
-  // Replace UID line in iCal with a new one
-  return icalString.replace(/^UID:[^\r\n]+(\r?\n)/m, `UID:${newUid}$1`);
-}
-
-function extractEventInfo(icalString) {
-  // Extract SUMMARY (title) and DTSTART from iCal for duplicate detection
-  const summaryMatch = icalString.match(/^SUMMARY[^:]*:(.+)$/m);
-  const dtstartMatch = icalString.match(/^DTSTART[^:]*:(.+)$/m);
-  return {
-    title: summaryMatch ? summaryMatch[1].trim() : null,
-    dtstart: dtstartMatch ? dtstartMatch[1].trim() : null
-  };
 }
 
 async function findDuplicateInTarget(targetCalendarId, sourceItem) {
