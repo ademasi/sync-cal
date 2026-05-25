@@ -297,3 +297,99 @@ describe("safeUpdate UID rewriting", () => {
     expect(modifiedIcal).toBe(sourceItem.item);
   });
 });
+
+describe("pushItem idempotency (logic copy)", () => {
+  // Mirrors background.js pushItem; keep in sync with the source.
+  function makePushItem({ safeCreate, safeUpdate, findDuplicateInTarget, saveMap, generateUid }) {
+    return async function pushItem(options, map, item, targetIndex = null) {
+      let targetUid = map.items[item.id];
+      if (!targetUid) {
+        let existingUid;
+        if (targetIndex) {
+          existingUid = targetIndex.get(item.item) || null;
+        } else {
+          existingUid = await findDuplicateInTarget(options.targetCalendarId, item);
+        }
+        if (existingUid) {
+          map.items[item.id] = existingUid;
+          await saveMap(map);
+          try { await safeUpdate(options.targetCalendarId, existingUid, item); return "updated"; }
+          catch { return "failed"; }
+        }
+        targetUid = generateUid();
+        map.items[item.id] = targetUid;
+        await saveMap(map);
+        try { await safeCreate(options.targetCalendarId, targetUid, item); return "created"; }
+        catch { return "failed"; }
+      }
+      try { await safeUpdate(options.targetCalendarId, targetUid, item); return "updated"; }
+      catch {
+        try { await safeCreate(options.targetCalendarId, targetUid, item); return "created"; }
+        catch { return "failed"; }
+      }
+    };
+  }
+
+  const options = { targetCalendarId: "tgt" };
+
+  test("timed-out create keeps the mapping (so next run can reconcile)", async () => {
+    const map = { items: {} };
+    const pushItem = makePushItem({
+      safeCreate: jest.fn().mockRejectedValue(new Error("Create timed out")),
+      safeUpdate: jest.fn(),
+      findDuplicateInTarget: jest.fn().mockResolvedValue(null),
+      saveMap: jest.fn(),
+      generateUid: () => "uid-1@sync-cal",
+    });
+    const result = await pushItem(options, map, { id: "src-1", item: "ICAL" });
+    expect(result).toBe("failed");
+    expect(map.items["src-1"]).toBe("uid-1@sync-cal"); // mapping persisted before write
+  });
+
+  test("existing mapping takes the update path and reuses the same UID", async () => {
+    const map = { items: { "src-1": "uid-1@sync-cal" } };
+    const safeUpdate = jest.fn().mockResolvedValue({});
+    const safeCreate = jest.fn();
+    const pushItem = makePushItem({
+      safeCreate, safeUpdate,
+      findDuplicateInTarget: jest.fn(),
+      saveMap: jest.fn(),
+      generateUid: () => "SHOULD-NOT-BE-USED",
+    });
+    const result = await pushItem(options, map, { id: "src-1", item: "ICAL" });
+    expect(result).toBe("updated");
+    expect(safeUpdate).toHaveBeenCalledWith("tgt", "uid-1@sync-cal", expect.anything());
+    expect(safeCreate).not.toHaveBeenCalled();
+  });
+
+  test("update failure on existing mapping recreates with the SAME UID (no duplicate)", async () => {
+    const map = { items: { "src-1": "uid-1@sync-cal" } };
+    const safeCreate = jest.fn().mockResolvedValue({});
+    const pushItem = makePushItem({
+      safeCreate,
+      safeUpdate: jest.fn().mockRejectedValue(new Error("not found")),
+      findDuplicateInTarget: jest.fn(),
+      saveMap: jest.fn(),
+      generateUid: () => "SHOULD-NOT-BE-USED",
+    });
+    const result = await pushItem(options, map, { id: "src-1", item: "ICAL" });
+    expect(result).toBe("created");
+    expect(safeCreate).toHaveBeenCalledWith("tgt", "uid-1@sync-cal", expect.anything());
+  });
+
+  test("linked duplicate path saves mapping before updating", async () => {
+    const callOrder = [];
+    const map = { items: {} };
+    const pushItem = makePushItem({
+      safeCreate: jest.fn(),
+      safeUpdate: jest.fn(async () => { callOrder.push("update"); }),
+      findDuplicateInTarget: jest.fn().mockResolvedValue("existing-uid"),
+      saveMap: jest.fn(async () => { callOrder.push("save"); }),
+      generateUid: () => "SHOULD-NOT-BE-USED",
+    });
+    const result = await pushItem(options, map, { id: "src-1", item: "ICAL" });
+    expect(result).toBe("updated");
+    expect(map.items["src-1"]).toBe("existing-uid");
+    expect(callOrder).toEqual(["save", "update"]);
+  });
+});
