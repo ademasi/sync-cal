@@ -3,7 +3,7 @@
  * One-way sync from a source calendar to a target calendar.
  */
 
-const { rewriteUid, extractEventInfo, computeSyncRange } = globalThis.SyncCalHelpers;
+const { rewriteUid, extractEventInfo, computeSyncRange, targetIndexKey } = globalThis.SyncCalHelpers;
 
 const DEFAULT_OPTIONS = {
   sourceCalendarId: "",
@@ -98,11 +98,6 @@ function generateUid() {
 const CALDAV_PACING_MS = 200;
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function targetIndexKey(icalString) {
-  const info = extractEventInfo(icalString);
-  return info.title && info.dtstart ? `${info.title}\0${info.dtstart}` : null;
 }
 
 async function findDuplicateInTarget(targetCalendarId, sourceItem) {
@@ -365,10 +360,11 @@ async function doFullSync(reason, force) {
     try {
       await safeRemove(options.targetCalendarId, targetUid);
       removed++;
+      delete map.items[sourceId];
     } catch (err) {
-      logError("Remove failed", targetUid, err);
+      logError("Remove failed (mapping kept)", targetUid, err);
+      failed++;
     }
-    delete map.items[sourceId];
   }
 
   await saveMap(map);
@@ -421,11 +417,11 @@ async function removeOneItem(calendarId, itemId) {
 
   try {
     await safeRemove(options.targetCalendarId, mappedTargetId);
+    delete map.items[itemId];
+    await saveMap(map);
   } catch (err) {
-    logError("Remove failed", mappedTargetId, err);
+    logError("Remove failed (mapping kept for retry)", mappedTargetId, err);
   }
-  delete map.items[itemId];
-  await saveMap(map);
 }
 
 function setupListeners() {

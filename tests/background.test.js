@@ -2,6 +2,8 @@
  * Tests for background.js sync logic
  */
 
+const { targetIndexKey } = require("../helpers.js");
+
 // Mock browser API
 const mockStorage = {
   data: {},
@@ -173,7 +175,9 @@ describe("options storage", () => {
     const DEFAULT_OPTIONS = {
       sourceCalendarId: "",
       targetCalendarId: "",
-      autoSync: true
+      autoSync: true,
+      syncPastDays: 30,
+      syncFutureDays: 0
     };
 
     mockStorage.data = {};
@@ -187,7 +191,9 @@ describe("options storage", () => {
     const DEFAULT_OPTIONS = {
       sourceCalendarId: "",
       targetCalendarId: "",
-      autoSync: true
+      autoSync: true,
+      syncPastDays: 30,
+      syncFutureDays: 0
     };
 
     mockStorage.data = {
@@ -199,7 +205,9 @@ describe("options storage", () => {
     expect(options).toEqual({
       sourceCalendarId: "src-1",
       targetCalendarId: "",
-      autoSync: false
+      autoSync: false,
+      syncPastDays: 30,
+      syncFutureDays: 0
     });
   });
 });
@@ -238,7 +246,8 @@ describe("pushItem idempotency (logic copy)", () => {
       if (!targetUid) {
         let existingUid;
         if (targetIndex) {
-          existingUid = targetIndex.get(item.item) || null;
+          const key = targetIndexKey(item.item);
+          existingUid = key ? (targetIndex.get(key) || null) : null;
         } else {
           existingUid = await findDuplicateInTarget(options.targetCalendarId, item);
         }
@@ -323,5 +332,25 @@ describe("pushItem idempotency (logic copy)", () => {
     expect(result).toBe("updated");
     expect(map.items["src-1"]).toBe("existing-uid");
     expect(callOrder).toEqual(["save", "update"]);
+  });
+
+  test("links via targetIndex without querying the target", async () => {
+    const ical = "BEGIN:VEVENT\r\nUID:src@x\r\nSUMMARY:Standup\r\nDTSTART:20260601T090000\r\nEND:VEVENT\r\n";
+    const map = { items: {} };
+    const findDuplicateInTarget = jest.fn();
+    const safeUpdate = jest.fn().mockResolvedValue({});
+    const index = new Map([[targetIndexKey(ical), "existing-uid@sync-cal"]]);
+    const pushItem = makePushItem({
+      safeCreate: jest.fn(),
+      safeUpdate,
+      findDuplicateInTarget,
+      saveMap: jest.fn(),
+      generateUid: () => "SHOULD-NOT-BE-USED",
+    });
+    const result = await pushItem(options, map, { id: "src@x", item: ical }, index);
+    expect(result).toBe("updated");
+    expect(findDuplicateInTarget).not.toHaveBeenCalled();
+    expect(map.items["src@x"]).toBe("existing-uid@sync-cal");
+    expect(safeUpdate).toHaveBeenCalledWith("tgt", "existing-uid@sync-cal", expect.anything());
   });
 });

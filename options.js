@@ -247,7 +247,9 @@ browser.storage.onChanged.addListener((changes, area) => {
       const c = status.counts;
       setStatus(c ? `Sync complete (${c.created} created, ${c.updated} updated, ${c.removed} removed).` : "Sync complete.");
     } else {
-      setStatus(`Sync failed: ${status.error || "Unexpected error."}`, true);
+      const c = status.counts;
+      const detail = c ? ` (${c.created} created, ${c.updated} updated, ${c.removed} removed, ${c.failed} failed)` : "";
+      setStatus(`Sync failed: ${status.error || "Unexpected error."}${detail}`, true);
     }
   }
 });

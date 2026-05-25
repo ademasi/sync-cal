@@ -58,6 +58,11 @@
     return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
   }
 
+  function targetIndexKey(icalString) {
+    const info = extractEventInfo(icalString);
+    return info.title && info.dtstart ? `${info.title}\0${info.dtstart}` : null;
+  }
+
   function computeSyncRange(now, pastDays, futureDays) {
     const dayMs = 86400000;
     const rangeStart = toIcalUtc(new Date(now.getTime() - pastDays * dayMs));
@@ -67,5 +72,5 @@
     return { rangeStart, rangeEnd };
   }
 
-  return { unfoldIcal, rewriteUid, extractEventInfo, extractUid, toIcalUtc, computeSyncRange };
+  return { unfoldIcal, rewriteUid, extractEventInfo, extractUid, toIcalUtc, computeSyncRange, targetIndexKey };
 });
