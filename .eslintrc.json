@@ -16,7 +16,8 @@
     "Ci": "readonly",
     "Cr": "readonly",
     "Components": "readonly",
-    "globalThis": "readonly"
+    "globalThis": "readonly",
+    "SyncCalHelpers": "readonly"
   },
   "rules": {
     "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^(isOwnCalendar|unwrapCalendar|getResolvedCalendarById|getCachedCalendar|isCachedCalendar|convertCalendar|propsToItem|convertItem|convertAlarm|setupE10sBrowser)$" }],
@@ -45,6 +46,10 @@
         "jest": true,
         "node": true
       }
+    },
+    {
+      "files": ["helpers.js"],
+      "env": { "browser": true, "node": true }
     }
   ]
 }
