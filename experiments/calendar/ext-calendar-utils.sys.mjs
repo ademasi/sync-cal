@@ -179,7 +179,7 @@ export function convertItem(item, options, extension) {
   }
 
   props.id = item.id;
-  props.calendarId = item.calendar.superCalendar.id;
+  props.calendarId = item.calendar?.superCalendar?.id ?? item.calendar?.id;
 
   const recId = item.recurrenceId?.getInTimezone(cal.timezoneService.UTC)?.icalString;
   if (recId) {

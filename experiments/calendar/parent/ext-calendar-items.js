@@ -11,6 +11,56 @@ console.log("[sync-cal] ext-calendar-items.js importing calUtils...");
 var { cal } = ChromeUtils.importESModule("resource:///modules/calendar/calUtils.sys.mjs");
 console.log("[sync-cal] ext-calendar-items.js imports complete");
 
+// CalDAV's adoptItem promise can hang when the post-PUT multiget fails to
+// notify the operation listener (observed on TB/BB 140 with Google CalDAV).
+// Resolve from the onAddItem observer, which fires when the item actually
+// lands in the calendar, and race it against adoptItem's own settlement.
+function adoptItemReliably(calendar, item) {
+  const expectedUid = item.id;
+  const setTimeoutFn = typeof setTimeout === "function" ? setTimeout : null;
+  const clearTimeoutFn = typeof clearTimeout === "function" ? clearTimeout : null;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timer = null;
+    const observer = cal.createAdapter(Ci.calIObserver, {
+      onAddItem(addedItem) {
+        if (!settled && addedItem && addedItem.id === expectedUid) {
+          finish(() => resolve(addedItem));
+        }
+      },
+    });
+    function finish(action) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer && clearTimeoutFn) {
+        clearTimeoutFn(timer);
+      }
+      cal.manager.removeCalendarObserver(observer);
+      action();
+    }
+    cal.manager.addCalendarObserver(observer);
+    if (setTimeoutFn) {
+      // Backstop so a never-arriving observer cannot leak forever; background.js
+      // also wraps the whole call in a 30s timeout.
+      timer = setTimeoutFn(
+        () => finish(() => reject(new ExtensionError(`Create observer timed out for ${expectedUid}`))),
+        28000
+      );
+    }
+    Promise.resolve()
+      .then(() => calendar.adoptItem(item))
+      .then(
+        // adoptItem may resolve with undefined on some CalDAV providers; resolve
+        // null so the non-item guard in create() throws a recoverable error
+        // rather than silently accepting a non-item value.
+        result => finish(() => resolve(result || null)),
+        err => finish(() => reject(err))
+      );
+  });
+}
+
 this.calendar_items = class extends ExtensionAPI {
   getAPI(context) {
     let baseURI = context.extension.rootURI.spec;
@@ -91,9 +141,12 @@ this.calendar_items = class extends ExtensionAPI {
             if (isCachedCalendar(calendarId)) {
               createdItem = await calendar.modifyItem(item, null);
             } else {
-              createdItem = await calendar.adoptItem(item);
+              createdItem = await adoptItemReliably(calendar, item);
             }
 
+            if (!createdItem || typeof createdItem.isEvent !== "function") {
+              throw new ExtensionError(`create resolved with a non-item value for ${calendarId}`);
+            }
             return convertItem(createdItem, createProperties, context.extension);
           },
           async update(calendarId, id, updateProperties) {
