@@ -155,9 +155,10 @@ async function syncNow() {
   if (!options) {
     return;
   }
-  await browser.storage.local.set({ options });
   setStatus("Syncing...");
-  await browser.storage.local.set({ manualSyncRequest: Date.now() });
+  // Write both in a single call to avoid triggering separate
+  // options_changed and manual sync (which caused double full syncs).
+  await browser.storage.local.set({ options, manualSyncRequest: Date.now() });
 }
 
 function swapCalendars() {

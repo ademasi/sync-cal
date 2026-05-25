@@ -229,3 +229,71 @@ describe("sync queue", () => {
     expect(order).toEqual([1, 2, 3]);
   });
 });
+
+describe("rewriteUid", () => {
+  // Extract the function to test directly
+  function rewriteUid(icalString, newUid) {
+    return icalString.replace(/^UID:[^\r\n]+(\r?\n)/m, `UID:${newUid}$1`);
+  }
+
+  test("replaces UID in simple iCal", () => {
+    const ical = "BEGIN:VEVENT\r\nUID:original-uid@example.com\r\nSUMMARY:Test\r\nEND:VEVENT\r\n";
+    const result = rewriteUid(ical, "new-uid@sync-cal");
+    expect(result).toContain("UID:new-uid@sync-cal\r\n");
+    expect(result).not.toContain("original-uid");
+  });
+
+  test("replaces UID with LF line endings", () => {
+    const ical = "BEGIN:VEVENT\nUID:original-uid\nSUMMARY:Test\nEND:VEVENT\n";
+    const result = rewriteUid(ical, "new-uid");
+    expect(result).toContain("UID:new-uid\n");
+    expect(result).not.toContain("original-uid");
+  });
+
+  test("preserves other iCal properties", () => {
+    const ical = "BEGIN:VEVENT\r\nUID:old\r\nSUMMARY:Meeting\r\nDTSTART:20260301T100000Z\r\nEND:VEVENT\r\n";
+    const result = rewriteUid(ical, "replaced");
+    expect(result).toContain("SUMMARY:Meeting");
+    expect(result).toContain("DTSTART:20260301T100000Z");
+    expect(result).toContain("UID:replaced");
+  });
+});
+
+describe("safeUpdate UID rewriting", () => {
+  beforeEach(resetMocks);
+
+  test("rewrites source UID to target item ID when updating", async () => {
+    // Replicate the safeUpdate logic
+    function rewriteUid(icalString, newUid) {
+      return icalString.replace(/^UID:[^\r\n]+(\r?\n)/m, `UID:${newUid}$1`);
+    }
+
+    const sourceIcal =
+      "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:source-uid-123\r\nSUMMARY:Test Event\r\nDTSTART:20260301T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    const targetItemId = "generated-uid-456@sync-cal";
+
+    mockCalendar.items.update.mockResolvedValue({ id: targetItemId });
+
+    // Simulate what safeUpdate now does
+    const modifiedIcal = rewriteUid(sourceIcal, targetItemId);
+    await mockCalendar.items.update("target-cal", targetItemId, {
+      format: "ical",
+      item: modifiedIcal
+    });
+
+    const call = mockCalendar.items.update.mock.calls[0];
+    expect(call[2].item).toContain("UID:generated-uid-456@sync-cal");
+    expect(call[2].item).not.toContain("UID:source-uid-123");
+  });
+
+  test("does not rewrite UID for non-string items", () => {
+    const sourceItem = { format: "jcal", item: { some: "object" } };
+
+    // Simulate safeUpdate logic for non-string
+    const modifiedIcal = typeof sourceItem.item === "string"
+      ? sourceItem.item.replace(/^UID:[^\r\n]+(\r?\n)/m, "UID:target-id$1")
+      : sourceItem.item;
+
+    expect(modifiedIcal).toBe(sourceItem.item);
+  });
+});

@@ -13,6 +13,7 @@ let cachedOptions = null;
 let cachedMap = null;
 let syncQueue = Promise.resolve();
 let cacheRefreshInFlight = false;
+let isSyncing = 0;
 
 function isCalendarApiAvailable() {
   return !!(browser.calendar && browser.calendar.calendars && browser.calendar.items);
@@ -146,37 +147,58 @@ async function safeCreate(targetCalendarId, sourceItem) {
     : sourceItem.item;
 
   logInfo("Creating item", sourceItem.id, "->", newUid, "type:", sourceItem.type);
-  const result = await withTimeout(
-    browser.calendar.items.create(targetCalendarId, {
-      type: sourceItem.type,
-      format,
-      item: modifiedIcal
-    }),
-    30000,
-    `Create timed out for ${sourceItem.id}`
-  );
-  logInfo("Created item", sourceItem.id, "->", result.id);
-  return result;
+  isSyncing++;
+  try {
+    const result = await withTimeout(
+      browser.calendar.items.create(targetCalendarId, {
+        type: sourceItem.type,
+        format,
+        item: modifiedIcal
+      }),
+      30000,
+      `Create timed out for ${sourceItem.id}`
+    );
+    logInfo("Created item", sourceItem.id, "->", result.id);
+    return result;
+  } finally {
+    isSyncing--;
+  }
 }
 
 async function safeUpdate(targetCalendarId, targetItemId, sourceItem) {
   const format = sourceItem.format || "ical";
-  return withTimeout(
-    browser.calendar.items.update(targetCalendarId, targetItemId, {
-      format,
-      item: sourceItem.item
-    }),
-    30000,
-    `Update timed out for ${targetItemId}`
-  );
+  // Rewrite the UID to match the target item's UID. Without this,
+  // the source UID overwrites the target's generated UID, causing
+  // remote providers (CalDAV, Exchange) to create a duplicate.
+  const modifiedIcal = typeof sourceItem.item === "string"
+    ? rewriteUid(sourceItem.item, targetItemId)
+    : sourceItem.item;
+  isSyncing++;
+  try {
+    return await withTimeout(
+      browser.calendar.items.update(targetCalendarId, targetItemId, {
+        format,
+        item: modifiedIcal
+      }),
+      30000,
+      `Update timed out for ${targetItemId}`
+    );
+  } finally {
+    isSyncing--;
+  }
 }
 
 async function safeRemove(targetCalendarId, targetItemId) {
-  await withTimeout(
-    browser.calendar.items.remove(targetCalendarId, targetItemId),
-    30000,
-    `Remove timed out for ${targetItemId}`
-  );
+  isSyncing++;
+  try {
+    await withTimeout(
+      browser.calendar.items.remove(targetCalendarId, targetItemId),
+      30000,
+      `Remove timed out for ${targetItemId}`
+    );
+  } finally {
+    isSyncing--;
+  }
 }
 
 function enqueueSync(task, propagateError = false) {
@@ -389,14 +411,17 @@ function setupListeners() {
     return;
   }
   browser.calendar.items.onCreated.addListener(item => {
+    if (isSyncing > 0) return;
     enqueueSync(() => syncOneItem(item));
   }, { returnFormat: "ical" });
 
   browser.calendar.items.onUpdated.addListener(item => {
+    if (isSyncing > 0) return;
     enqueueSync(() => syncOneItem(item));
   }, { returnFormat: "ical" });
 
   browser.calendar.items.onRemoved.addListener((calendarId, id) => {
+    if (isSyncing > 0) return;
     enqueueSync(() => removeOneItem(calendarId, id));
   });
 }
@@ -463,12 +488,16 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (changes.options) {
     resetOptionsCache();
     cachedMap = null;
-    enqueueSync(async () => {
-      const options = await getOptions();
-      if (options.autoSync) {
-        await doFullSync("options_changed", false);
-      }
-    });
+    // Skip the options_changed sync when a manual sync is also requested
+    // in the same change event (the manual sync with force=true covers it).
+    if (!changes.manualSyncRequest) {
+      enqueueSync(async () => {
+        const options = await getOptions();
+        if (options.autoSync) {
+          await doFullSync("options_changed", false);
+        }
+      });
+    }
   }
   if (changes.calendarCacheRefresh) {
     refreshCalendarCache().catch(err => logError("Calendar cache refresh failed", err));
