@@ -231,7 +231,8 @@ browser.storage.onChanged.addListener((changes, area) => {
       return;
     }
     if (status.ok) {
-      setStatus("Sync complete.");
+      const c = status.counts;
+      setStatus(c ? `Sync complete (${c.created} created, ${c.updated} updated, ${c.removed} removed).` : "Sync complete.");
     } else {
       setStatus(`Sync failed: ${status.error || "Unexpected error."}`, true);
     }

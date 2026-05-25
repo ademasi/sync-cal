@@ -17,7 +17,6 @@ let cachedOptions = null;
 let cachedMap = null;
 let syncQueue = Promise.resolve();
 let cacheRefreshInFlight = false;
-let isSyncing = 0;
 
 function isCalendarApiAvailable() {
   return !!(browser.calendar && browser.calendar.calendars && browser.calendar.items);
@@ -222,32 +221,22 @@ async function safeUpdate(targetCalendarId, targetItemId, sourceItem) {
   const modifiedIcal = typeof sourceItem.item === "string"
     ? rewriteUid(sourceItem.item, targetItemId)
     : sourceItem.item;
-  isSyncing++;
-  try {
-    return await withTimeout(
-      browser.calendar.items.update(targetCalendarId, targetItemId, {
-        format,
-        item: modifiedIcal
-      }),
-      30000,
-      `Update timed out for ${targetItemId}`
-    );
-  } finally {
-    isSyncing--;
-  }
+  return withTimeout(
+    browser.calendar.items.update(targetCalendarId, targetItemId, {
+      format,
+      item: modifiedIcal
+    }),
+    30000,
+    `Update timed out for ${targetItemId}`
+  );
 }
 
 async function safeRemove(targetCalendarId, targetItemId) {
-  isSyncing++;
-  try {
-    await withTimeout(
-      browser.calendar.items.remove(targetCalendarId, targetItemId),
-      30000,
-      `Remove timed out for ${targetItemId}`
-    );
-  } finally {
-    isSyncing--;
-  }
+  await withTimeout(
+    browser.calendar.items.remove(targetCalendarId, targetItemId),
+    30000,
+    `Remove timed out for ${targetItemId}`
+  );
 }
 
 function enqueueSync(task, propagateError = false) {
@@ -445,17 +434,14 @@ function setupListeners() {
     return;
   }
   browser.calendar.items.onCreated.addListener(item => {
-    if (isSyncing > 0) return;
     enqueueSync(() => syncOneItem(item));
   }, { returnFormat: "ical" });
 
   browser.calendar.items.onUpdated.addListener(item => {
-    if (isSyncing > 0) return;
     enqueueSync(() => syncOneItem(item));
   }, { returnFormat: "ical" });
 
   browser.calendar.items.onRemoved.addListener((calendarId, id) => {
-    if (isSyncing > 0) return;
     enqueueSync(() => removeOneItem(calendarId, id));
   });
 }
@@ -475,8 +461,12 @@ async function listCalendarsForUi() {
 
 async function manualSyncForUi() {
   try {
-    await enqueueSync(() => doFullSync("manual", true), true);
-    return { ok: true };
+    const counts = await enqueueSync(() => doFullSync("manual", true), true);
+    const failed = counts && counts.failed ? counts.failed : 0;
+    if (failed > 0) {
+      return { ok: false, error: `Sync finished with ${failed} item(s) failing`, counts };
+    }
+    return { ok: true, counts };
   } catch (err) {
     logError("Manual sync failed", err);
     return { ok: false, error: err?.message || String(err) };
